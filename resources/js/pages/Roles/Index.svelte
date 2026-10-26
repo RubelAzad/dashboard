@@ -1,58 +1,112 @@
+<script module>
+    // Rendered inside the persistent layout chosen in app.js; only this page re-renders on navigation.
+    export const layout = { title: 'Roles' };
+</script>
+
 <script>
-    import { Link, router } from '@inertiajs/svelte';
-    import AdminLayout from '../../layouts/AdminLayout.svelte';
+    import { router } from '@inertiajs/svelte';
+    import KeyRound from '@lucide/svelte/icons/key-round';
+    import Lock from '@lucide/svelte/icons/lock';
+    import Pencil from '@lucide/svelte/icons/pencil';
+    import Plus from '@lucide/svelte/icons/plus';
+    import ShieldCheck from '@lucide/svelte/icons/shield-check';
+    import Trash2 from '@lucide/svelte/icons/trash-2';
+    import Users from '@lucide/svelte/icons/users';
+    import Badge from '../../components/Badge.svelte';
+    import EmptyState from '../../components/EmptyState.svelte';
+    import Modal from '../../components/Modal.svelte';
+    import PageHeader from '../../components/PageHeader.svelte';
+    import RoleForm from '../../components/RoleForm.svelte';
+    import { confirm } from '../../lib/confirm.svelte.js';
     import { can } from '../../lib/permissions';
 
-    let { roles } = $props();
+    let { roles, permissionGroups } = $props();
 
-    function destroy(role) {
-        const warning = role.users_count ? ` ${role.users_count} user(s) will lose this role.` : '';
-        if (confirm(`Delete role ${role.name}?${warning}`)) {
-            router.delete(`/roles/${role.id}`, { preserveScroll: true });
-        }
+    // Create/edit modal. `editing` is null for a new role. Links elsewhere can open the
+    // create modal with /roles?create=1.
+    let modalOpen = $state(new URLSearchParams(location.search).has('create') && can('roles.create'));
+    let editing = $state(null);
+
+    function open(role = null) {
+        editing = role;
+        modalOpen = true;
+    }
+
+    async function destroy(role) {
+        const ok = await confirm({
+            title: `Delete the ${role.name} role?`,
+            message: role.users_count
+                ? `${role.users_count} user(s) will lose this role and its permissions.`
+                : 'No users currently have this role.',
+            confirmLabel: 'Delete role',
+        });
+        if (ok) router.delete(`/roles/${role.id}`, { preserveScroll: true });
     }
 </script>
 
-<AdminLayout title="Roles">
-    {#if can('roles.create')}
-        <div class="mb-4 flex justify-end">
-            <Link href="/roles/create" class="btn-primary">New role</Link>
-        </div>
-    {/if}
+<PageHeader title="Roles" description="Roles group permissions so you can grant access in one step.">
+    {#snippet actions()}
+        {#if can('roles.create')}
+            <button type="button" class="btn-primary" onclick={() => open()}><Plus /> New role</button>
+        {/if}
+    {/snippet}
+</PageHeader>
 
-    <div class="card overflow-x-auto">
-        <table class="min-w-full divide-y divide-slate-200 text-sm">
-            <thead class="bg-slate-50 text-left text-xs font-medium tracking-wide text-slate-500 uppercase">
-                <tr>
-                    <th class="px-5 py-2">Role</th>
-                    <th class="px-5 py-2">Users</th>
-                    <th class="px-5 py-2">Permissions</th>
-                    <th class="px-5 py-2"><span class="sr-only">Actions</span></th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100">
-                {#each roles as role (role.id)}
-                    <tr>
-                        <td class="px-5 py-3 font-medium text-slate-900">{role.name}</td>
-                        <td class="px-5 py-3 text-slate-600">{role.users_count}</td>
-                        <td class="px-5 py-3 text-slate-600">{role.protected ? 'All' : role.permissions_count}</td>
-                        <td class="px-5 py-3 text-right whitespace-nowrap">
-                            {#if role.protected}
-                                <span class="text-xs text-slate-400">Protected</span>
-                            {:else}
-                                <div class="flex justify-end gap-4">
-                                    {#if can('roles.update')}
-                                        <Link href="/roles/{role.id}/edit" class="link-action">Edit</Link>
-                                    {/if}
-                                    {#if can('roles.delete')}
-                                        <button type="button" class="link-danger" onclick={() => destroy(role)}>Delete</button>
-                                    {/if}
-                                </div>
-                            {/if}
-                        </td>
-                    </tr>
-                {/each}
-            </tbody>
-        </table>
+{#if roles.length === 0}
+    <div class="card">
+        <EmptyState icon={ShieldCheck} title="No roles yet" description="Create a role to start granting permissions." />
     </div>
-</AdminLayout>
+{:else}
+    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {#each roles as role (role.id)}
+            <article class="card group flex flex-col p-5 transition-shadow hover:shadow-md">
+                <div class="flex items-start justify-between gap-3">
+                    <div
+                        class="flex size-10 items-center justify-center rounded-xl {role.protected
+                            ? 'bg-linear-to-br from-brand-500 to-brand-700 text-white shadow-md shadow-brand-500/30'
+                            : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}"
+                    >
+                        <ShieldCheck class="size-5" />
+                    </div>
+                    {#if role.protected}
+                        <Badge tone="brand"><Lock class="size-3" /> Protected</Badge>
+                    {/if}
+                </div>
+
+                <h2 class="mt-4 text-base font-semibold text-slate-900 dark:text-white">{role.name}</h2>
+
+                <div class="mt-2 flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+                    <span class="inline-flex items-center gap-1.5"><Users class="size-4" /> {role.users_count} {role.users_count === 1 ? 'user' : 'users'}</span>
+                    <span class="inline-flex items-center gap-1.5">
+                        <KeyRound class="size-4" />
+                        {role.protected ? 'All permissions' : `${role.permissions_count} permissions`}
+                    </span>
+                </div>
+
+                <div class="mt-5 flex items-center justify-end gap-1 border-t border-slate-100 pt-4 dark:border-slate-800">
+                    {#if role.protected}
+                        <p class="mr-auto text-xs text-slate-400">Always has every permission.</p>
+                    {:else}
+                        {#if can('roles.update')}
+                            <button type="button" class="btn-ghost px-2.5 py-1.5" onclick={() => open(role)}><Pencil /> Edit</button>
+                        {/if}
+                        {#if can('roles.delete')}
+                            <button type="button" class="btn-icon-danger" title="Delete" aria-label="Delete {role.name}" onclick={() => destroy(role)}>
+                                <Trash2 />
+                            </button>
+                        {/if}
+                    {/if}
+                </div>
+            </article>
+        {/each}
+    </div>
+{/if}
+
+<Modal
+    bind:open={modalOpen}
+    title={editing ? `Edit role: ${editing.name}` : 'New role'}
+    description={editing ? `Changes apply immediately to every user with the ${editing.name} role.` : 'Bundle permissions into a role you can assign to users.'}
+    size="xl"
+>
+    <RoleForm role={editing} {permissionGroups} onclose={() => (modalOpen = false)} />
+</Modal>

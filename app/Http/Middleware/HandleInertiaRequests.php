@@ -3,9 +3,13 @@
 namespace App\Http\Middleware;
 
 use App\Models\Setting;
+use App\Support\Appearance;
+use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Inertia\Inertia;
 use Inertia\Middleware;
+use Symfony\Component\HttpFoundation\Response;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -26,6 +30,20 @@ class HandleInertiaRequests extends Middleware
     public function version(Request $request): ?string
     {
         return parent::version($request);
+    }
+
+    /**
+     * Encrypt browser history (so Inertia::clearHistory() on logout wipes cached pages) only over
+     * HTTPS: browsers expose the Web Crypto API to secure pages only, and on plain HTTP Inertia
+     * throws "Unable to encrypt history" and stops rendering.
+     */
+    public function handle(Request $request, Closure $next): Response
+    {
+        if ($request->isSecure()) {
+            Inertia::encryptHistory();
+        }
+
+        return parent::handle($request, $next);
     }
 
     /**
@@ -53,6 +71,12 @@ class HandleInertiaRequests extends Middleware
                     'roles' => $user->getRoleNames(),
                     'permissions' => $user->getAllPermissions()->pluck('name'),
                 ] : null,
+            ],
+            // Theme: organization default, the user's own override (if any) and whether overrides are allowed.
+            'theme' => fn () => [
+                'defaults' => Appearance::defaults(),
+                'mine' => Appearance::forUser($user),
+                'allowCustom' => Appearance::allowUserThemes(),
             ],
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),

@@ -60,6 +60,7 @@ class UserManagementTest extends TestCase
     public function test_admin_can_create_user_with_roles(): void
     {
         $this->actingAs($this->admin)
+            ->from('/users')
             ->post('/users', [
                 'name' => 'New Person',
                 'email' => 'new@example.com',
@@ -78,6 +79,7 @@ class UserManagementTest extends TestCase
     public function test_create_validates_input(): void
     {
         $this->actingAs($this->admin)
+            ->from('/users')
             ->post('/users', ['name' => '', 'email' => 'not-an-email', 'password' => 'a', 'roles' => ['Nope']])
             ->assertSessionHasErrors(['name', 'email', 'password', 'roles.0']);
     }
@@ -87,6 +89,7 @@ class UserManagementTest extends TestCase
         $target = User::factory()->create();
 
         $this->actingAs($this->admin)
+            ->from('/users')
             ->put("/users/{$target->id}", [
                 'name' => $target->name,
                 'email' => $target->email,
@@ -100,7 +103,11 @@ class UserManagementTest extends TestCase
 
     public function test_admin_cannot_edit_or_delete_a_super_admin(): void
     {
-        $this->actingAs($this->admin)->get("/users/{$this->superAdmin->id}/edit")->assertForbidden();
+        $this->actingAs($this->admin)->put("/users/{$this->superAdmin->id}", [
+            'name' => 'Hijacked',
+            'email' => $this->superAdmin->email,
+            'is_active' => true,
+        ])->assertForbidden();
         $this->actingAs($this->admin)->delete("/users/{$this->superAdmin->id}")->assertForbidden();
     }
 
@@ -109,6 +116,7 @@ class UserManagementTest extends TestCase
         $target = User::factory()->create();
 
         $this->actingAs($this->admin)
+            ->from('/users')
             ->put("/users/{$target->id}", [
                 'name' => $target->name,
                 'email' => $target->email,
@@ -158,6 +166,7 @@ class UserManagementTest extends TestCase
         $second = User::factory()->create()->assignRole(User::SUPER_ADMIN_ROLE);
 
         $this->actingAs($this->superAdmin)
+            ->from('/users')
             ->put("/users/{$second->id}", [
                 'name' => $second->name,
                 'email' => $second->email,

@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Support\SessionKey;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -60,8 +61,29 @@ class AuthenticationTest extends TestCase
     {
         $this->actingAs(User::factory()->create())
             ->post('/logout')
-            ->assertRedirect('/login');
+            ->assertRedirect('/login')
+            ->assertSessionHas('success')
+            ->assertSessionHas(SessionKey::CLEAR_HISTORY, true);
 
         $this->assertGuest();
+    }
+
+    public function test_dashboard_pages_are_not_cached_by_the_browser(): void
+    {
+        $user = User::factory()->create()->assignRole('User');
+
+        $response = $this->actingAs($user)->get('/dashboard')->assertOk();
+
+        $this->assertStringContainsString('no-store', $response->headers->get('Cache-Control'));
+    }
+
+    public function test_back_button_after_logout_redirects_to_login(): void
+    {
+        $user = User::factory()->create()->assignRole('User');
+
+        $this->actingAs($user)->post('/logout');
+
+        // The client re-requests the restored page; it must not be served to a guest.
+        $this->get('/dashboard', ['X-Inertia' => 'true'])->assertRedirect('/login');
     }
 }

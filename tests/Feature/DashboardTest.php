@@ -28,7 +28,16 @@ class DashboardTest extends TestCase
     {
         $this->actingAs(User::factory()->create())
             ->get('/dashboard')
-            ->assertForbidden();
+            ->assertForbidden()
+            ->assertInertia(fn (Assert $page) => $page->component('Error')->where('status', 403));
+    }
+
+    public function test_unknown_pages_render_the_error_page(): void
+    {
+        $this->actingAs(User::factory()->create())
+            ->get('/does-not-exist')
+            ->assertNotFound()
+            ->assertInertia(fn (Assert $page) => $page->component('Error')->where('status', 404));
     }
 
     public function test_users_with_permission_see_dashboard(): void
@@ -42,6 +51,7 @@ class DashboardTest extends TestCase
                 ->component('Dashboard')
                 ->has('stats', fn (Assert $stats) => $stats->where('users', 1)->etc())
                 ->has('recentUsers', 1)
+                ->has('roleBreakdown', 3)
                 ->where('auth.user.permissions', ['dashboard.view'])
             );
     }

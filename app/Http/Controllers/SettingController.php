@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Setting;
+use App\Support\ActivityLogger;
+use App\Support\Appearance;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -22,6 +24,8 @@ class SettingController extends Controller
                 'logo_url' => $settings['logo_path'] ? Storage::disk('public')->url($settings['logo_path']) : null,
             ],
             'timezones' => timezone_identifiers_list(),
+            'appearance' => Appearance::defaults(),
+            'allowUserThemes' => Appearance::allowUserThemes(),
         ]);
     }
 
@@ -34,6 +38,8 @@ class SettingController extends Controller
             'logo' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:1024'],
             'remove_logo' => ['boolean'],
         ]);
+
+        $before = Setting::allValues();
 
         Setting::set('app_name', $validated['app_name']);
         Setting::set('timezone', $validated['timezone']);
@@ -49,6 +55,8 @@ class SettingController extends Controller
                 ? $request->file('logo')->store('branding', 'public')
                 : null);
         }
+
+        ActivityLogger::audit('updated', 'settings', null, 'General settings', $before, Setting::allValues());
 
         return back()->with('success', 'Settings saved.');
     }

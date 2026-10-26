@@ -1,125 +1,200 @@
 <script>
     import { Link, page } from '@inertiajs/svelte';
+    import Activity from '@lucide/svelte/icons/activity';
+    import FileClock from '@lucide/svelte/icons/file-clock';
+    import KeyRound from '@lucide/svelte/icons/key-round';
+    import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
+    import Menu from '@lucide/svelte/icons/menu';
+    import Palette from '@lucide/svelte/icons/palette';
+    import PanelLeft from '@lucide/svelte/icons/panel-left';
+    import ScrollText from '@lucide/svelte/icons/scroll-text';
+    import Settings from '@lucide/svelte/icons/settings';
+    import ShieldCheck from '@lucide/svelte/icons/shield-check';
+    import UserCog from '@lucide/svelte/icons/user-cog';
+    import Users from '@lucide/svelte/icons/users';
+    import X from '@lucide/svelte/icons/x';
+    import AppearancePanel from '../components/AppearancePanel.svelte';
+    import ConfirmDialog from '../components/ConfirmDialog.svelte';
     import FlashMessage from '../components/FlashMessage.svelte';
+    import NavGroup from '../components/NavGroup.svelte';
     import NavLink from '../components/NavLink.svelte';
+    import UserMenu from '../components/UserMenu.svelte';
     import { can } from '../lib/permissions';
 
     let { title = '', children } = $props();
 
-    let sidebarOpen = $state(false);
-
     // Each link is shown only if the user holds `permission`. Hiding a link is cosmetic:
-    // the matching route enforces the same permission on the server. `icon` is an SVG path.
-    const navigation = [
+    // the matching route enforces the same permission on the server. An item with
+    // `children` renders as a collapsible group and is hidden when no child is visible.
+    const sections = [
         {
-            label: 'Dashboard',
-            href: '/dashboard',
-            permission: 'dashboard.view',
-            icon: 'M3 12l9-9 9 9M5 10v10h5v-6h4v6h5V10',
+            label: 'Overview',
+            items: [{ label: 'Dashboard', href: '/dashboard', permission: 'dashboard.view', icon: LayoutDashboard }],
         },
         {
-            label: 'Users',
-            href: '/users',
-            permission: 'users.view',
-            icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM4 21a8 8 0 0116 0',
+            label: 'Access control',
+            items: [
+                { label: 'Users', href: '/users', permission: 'users.view', icon: Users },
+                {
+                    label: 'Role & Permission',
+                    icon: UserCog,
+                    children: [
+                        { label: 'User Role', href: '/roles', permission: 'roles.view', icon: ShieldCheck },
+                        { label: 'User Permission', href: '/permissions', permission: 'permissions.view', icon: KeyRound },
+                    ],
+                },
+            ],
         },
         {
-            label: 'Roles',
-            href: '/roles',
-            permission: 'roles.view',
-            icon: 'M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z',
+            label: 'Monitoring',
+            items: [
+                {
+                    label: 'Log',
+                    icon: ScrollText,
+                    children: [
+                        { label: 'Activity Log', href: '/logs/activity', permission: 'activity-logs.view', icon: Activity },
+                        { label: 'Audit Log', href: '/logs/audit', permission: 'audit-logs.view', icon: FileClock },
+                    ],
+                },
+            ],
         },
         {
-            label: 'Permissions',
-            href: '/permissions',
-            permission: 'permissions.view',
-            icon: 'M15 7a3 3 0 11-6 0 3 3 0 016 0zM12 10v11m0-4h4m-4 3h3',
-        },
-        {
-            label: 'Settings',
-            href: '/settings',
-            permission: 'settings.view',
-            icon: 'M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z',
+            label: 'System',
+            items: [{ label: 'Settings', href: '/settings', permission: 'settings.view', icon: Settings }],
         },
     ];
 
+    const COLLAPSED_KEY = 'sidebar-collapsed';
+
+    let mobileOpen = $state(false);
+    let appearanceOpen = $state(false);
+    // Remembered across sessions in localStorage.
+    let collapsed = $state(readCollapsed());
+
+    function readCollapsed() {
+        try {
+            return localStorage.getItem(COLLAPSED_KEY) === '1';
+        } catch {
+            return false;
+        }
+    }
+
+    function toggleCollapsed() {
+        collapsed = !collapsed;
+        try {
+            localStorage.setItem(COLLAPSED_KEY, collapsed ? '1' : '0');
+        } catch {
+            // Ignore blocked storage.
+        }
+    }
+
     const app = $derived(page.props.app);
-    const user = $derived(page.props.auth.user);
-    const visibleNavigation = $derived(navigation.filter((item) => can(item.permission)));
+    const visibleSections = $derived(
+        sections
+            .map((section) => ({
+                ...section,
+                items: section.items
+                    .map((item) => (item.children ? { ...item, children: item.children.filter((child) => can(child.permission)) } : item))
+                    .filter((item) => (item.children ? item.children.length > 0 : can(item.permission))),
+            }))
+            .filter((section) => section.items.length > 0),
+    );
 </script>
 
 <svelte:head>
-    <title>{title ? `${title} - ${app.name}` : app.name}</title>
+    <title>{title ? `${title} · ${app.name}` : app.name}</title>
 </svelte:head>
 
-<div class="min-h-screen">
-    {#if sidebarOpen}
+<svelte:window onkeydown={(event) => event.key === 'Escape' && (mobileOpen = false)} />
+
+<div class="app-shell min-h-screen" data-collapsed={collapsed}>
+    {#if mobileOpen}
         <button
             type="button"
-            class="fixed inset-0 z-30 bg-slate-900/50 lg:hidden"
+            class="fixed inset-0 z-30 animate-fade-in bg-slate-950/60 backdrop-blur-sm lg:hidden"
             aria-label="Close sidebar"
-            onclick={() => (sidebarOpen = false)}
+            onclick={() => (mobileOpen = false)}
         ></button>
     {/if}
 
-    <aside
-        class="fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-slate-900 transition-transform lg:translate-x-0 {sidebarOpen
-            ? 'translate-x-0'
-            : '-translate-x-full'}"
-    >
-        <div class="flex h-16 items-center gap-2 px-6">
-            {#if app.logo}
-                <img src={app.logo} alt="" class="h-8 w-8 rounded object-contain" />
-            {/if}
-            <span class="truncate text-lg font-semibold text-white">{app.name}</span>
+    <!-- Colours and shape come from the active design (see .app-sidebar in app.css). -->
+    <aside class="app-sidebar lg:translate-x-0 {mobileOpen ? 'translate-x-0' : '-translate-x-full'}">
+        <div class="flex h-16 shrink-0 items-center gap-3 px-5 {collapsed ? 'lg:justify-center lg:px-0' : ''}">
+            <Link prefetch href="/dashboard" class="flex min-w-0 items-center gap-3">
+                {#if app.logo}
+                    <img src={app.logo} alt="" class="size-8 shrink-0 rounded-lg bg-white object-contain p-0.5" />
+                {:else}
+                    <span
+                        class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-linear-to-br from-brand-400 to-brand-700 text-sm font-bold text-white shadow-lg shadow-brand-500/30 ring-1 ring-white/20"
+                    >
+                        {app.name.charAt(0).toUpperCase()}
+                    </span>
+                {/if}
+                <span class="app-sidebar-title truncate text-[15px] font-semibold tracking-tight {collapsed ? 'lg:hidden' : ''}">{app.name}</span>
+            </Link>
+            <button type="button" class="app-nav-link ml-auto p-1 lg:hidden" aria-label="Close sidebar" onclick={() => (mobileOpen = false)}>
+                <X class="size-5" />
+            </button>
         </div>
 
-        <nav class="flex-1 space-y-1 px-3 py-4">
-            {#each visibleNavigation as item (item.href)}
-                <NavLink href={item.href} onclick={() => (sidebarOpen = false)}>
-                    <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" d={item.icon} />
-                    </svg>
-                    {item.label}
-                </NavLink>
+        <nav class="flex-1 space-y-6 overflow-y-auto px-3 py-4">
+            {#each visibleSections as section (section.label)}
+                <div>
+                    <p class="app-nav-label mb-2 px-3 text-[11px] font-semibold tracking-wider uppercase {collapsed ? 'lg:sr-only' : ''}">
+                        {section.label}
+                    </p>
+                    <div class="space-y-0.5">
+                        {#each section.items as item (item.label)}
+                            {#if item.children}
+                                <NavGroup label={item.label} icon={item.icon} items={item.children} {collapsed} onnavigate={() => (mobileOpen = false)} />
+                            {:else}
+                                <NavLink href={item.href} icon={item.icon} label={item.label} {collapsed} onclick={() => (mobileOpen = false)} />
+                            {/if}
+                        {/each}
+                    </div>
+                </div>
             {/each}
         </nav>
-    </aside>
 
-    <div class="lg:pl-64">
-        <header class="sticky top-0 z-20 flex h-16 items-center gap-4 border-b border-slate-200 bg-white px-4 sm:px-6">
+        <div class="app-sidebar-divider hidden border-t p-3 lg:block">
             <button
                 type="button"
-                class="rounded-md p-2 text-slate-600 hover:bg-slate-100 lg:hidden"
-                aria-label="Open sidebar"
-                onclick={() => (sidebarOpen = true)}
+                class="app-nav-link w-full py-2 {collapsed ? 'justify-center px-0' : ''}"
+                aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                onclick={toggleCollapsed}
             >
-                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
+                <PanelLeft class="app-nav-icon size-4.5 shrink-0" />
+                {#if !collapsed}<span>Collapse</span>{/if}
+            </button>
+        </div>
+    </aside>
+
+    <div class="app-content">
+        <header class="app-header sticky top-0 z-20 flex h-16 items-center gap-2 px-4 sm:px-6 lg:px-8">
+            <button type="button" class="btn-icon -ml-1 lg:hidden" aria-label="Open sidebar" onclick={() => (mobileOpen = true)}>
+                <Menu />
             </button>
 
-            <h1 class="flex-1 truncate text-lg font-semibold text-slate-900">{title}</h1>
+            <p class="flex-1 truncate text-sm text-slate-500 dark:text-slate-400">
+                <span class="hidden sm:inline">{app.name}</span>
+                {#if title}
+                    <span class="mx-1.5 hidden text-slate-300 sm:inline dark:text-slate-600">/</span>
+                    <span class="font-medium text-slate-900 dark:text-white">{title}</span>
+                {/if}
+            </p>
 
-            <div class="flex items-center gap-3">
-                <div class="hidden text-right sm:block">
-                    <p class="text-sm font-medium text-slate-900">{user.name}</p>
-                    <p class="text-xs text-slate-500">{user.roles.join(', ')}</p>
-                </div>
-                <Link
-                    href="/logout"
-                    method="post"
-                    as="button"
-                    class="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                    Log out
-                </Link>
-            </div>
+            <button type="button" class="btn-icon size-9" title="Appearance" aria-label="Appearance" onclick={() => (appearanceOpen = true)}>
+                <Palette class="size-[1.15rem]!" />
+            </button>
+            <UserMenu onappearance={() => (appearanceOpen = true)} />
         </header>
 
-        <main class="p-4 sm:p-6">
-            <FlashMessage />
+        <main class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             {@render children()}
         </main>
     </div>
 </div>
+
+<AppearancePanel bind:open={appearanceOpen} />
+<FlashMessage />
+<ConfirmDialog />

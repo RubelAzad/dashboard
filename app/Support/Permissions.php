@@ -19,6 +19,9 @@ final class Permissions
         'roles' => ['view', 'create', 'update', 'delete'],
         'permissions' => ['view', 'create', 'update', 'delete'],
         'settings' => ['view', 'update'],
+        'appearance' => ['update'],
+        'activity-logs' => ['view'],
+        'audit-logs' => ['view'],
     ];
 
     /**

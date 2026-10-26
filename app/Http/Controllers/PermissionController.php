@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\ActivityLogger;
 use App\Support\Permissions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -32,6 +33,8 @@ class PermissionController extends Controller implements HasMiddleware
             'guard_name' => 'web',
         ]);
 
+        ActivityLogger::audit('created', 'permission', $permission->id, $permission->name, [], ['name' => $permission->name]);
+
         return back()->with('success', "Permission {$permission->name} created.");
     }
 
@@ -41,7 +44,10 @@ class PermissionController extends Controller implements HasMiddleware
             return back()->with('error', 'Core permissions are used by the application and cannot be renamed.');
         }
 
+        $oldName = $permission->name;
         $permission->update(['name' => $this->validateName($request, $permission)]);
+
+        ActivityLogger::audit('updated', 'permission', $permission->id, $permission->name, ['name' => $oldName], ['name' => $permission->name]);
 
         return back()->with('success', "Permission {$permission->name} updated.");
     }
@@ -53,6 +59,8 @@ class PermissionController extends Controller implements HasMiddleware
         }
 
         $permission->delete();
+
+        ActivityLogger::audit('deleted', 'permission', $permission->id, $permission->name, ['name' => $permission->name]);
 
         return back()->with('success', "Permission {$permission->name} deleted.");
     }

@@ -35,6 +35,7 @@ class RolePermissionManagementTest extends TestCase
     public function test_role_can_be_created_with_permissions(): void
     {
         $this->actingAs($this->superAdmin)
+            ->from('/roles')
             ->post('/roles', ['name' => 'Editor', 'permissions' => ['users.view', 'dashboard.view']])
             ->assertRedirect('/roles');
 
@@ -50,14 +51,13 @@ class RolePermissionManagementTest extends TestCase
         $user = User::factory()->create()->assignRole('Viewer');
 
         $this->actingAs($user)->get('/users')->assertOk();
-        $this->actingAs($user)->get('/users/create')->assertForbidden();
+        $this->actingAs($user)->post('/users', ['name' => 'X', 'email' => 'x@example.com'])->assertForbidden();
     }
 
     public function test_super_admin_role_cannot_be_edited_or_deleted(): void
     {
         $role = Role::findByName(User::SUPER_ADMIN_ROLE);
 
-        $this->actingAs($this->superAdmin)->get("/roles/{$role->id}/edit")->assertRedirect('/roles');
         $this->actingAs($this->superAdmin)->put("/roles/{$role->id}", ['name' => 'Renamed'])->assertSessionHas('error');
         $this->actingAs($this->superAdmin)->delete("/roles/{$role->id}")->assertSessionHas('error');
 

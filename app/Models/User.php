@@ -32,6 +32,21 @@ class User extends Authenticatable
     }
 
     /**
+     * Values compared by the audit log when this user is created, edited or deleted.
+     *
+     * @return array<string, mixed>
+     */
+    public function auditSnapshot(): array
+    {
+        return [
+            'name' => $this->name,
+            'email' => $this->email,
+            'is_active' => (bool) $this->is_active,
+            'roles' => $this->getRoleNames()->sort()->values()->all(),
+        ];
+    }
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var list<string>
@@ -64,6 +79,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
+            'preferences' => 'array',
         ];
     }
 }

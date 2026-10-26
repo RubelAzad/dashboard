@@ -22,8 +22,11 @@ class RolesAndPermissionsSeeder extends Seeder
         // Super Admin is granted everything through Gate::before in AppServiceProvider.
         Role::findOrCreate(User::SUPER_ADMIN_ROLE, 'web');
 
+        // Admins manage everything except permissions and the organization theme.
         Role::findOrCreate('Admin', 'web')->syncPermissions(
-            Permission::where('name', 'not like', 'permissions.%')->get()
+            Permission::where('name', 'not like', 'permissions.%')
+                ->where('name', 'not like', 'appearance.%')
+                ->get()
         );
 
         Role::findOrCreate('User', 'web')->syncPermissions(['dashboard.view']);

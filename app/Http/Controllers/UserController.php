@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\UserRequest;
 use App\Models\Setting;
 use App\Models\User;
+use App\Support\ActivityLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -38,12 +39,6 @@ class UserController extends Controller implements HasMiddleware
         return Inertia::render('Users/Index', [
             'users' => $users,
             'filters' => ['search' => $search],
-        ]);
-    }
-
-    public function create(Request $request): Response
-    {
-        return Inertia::render('Users/Create', [
             'roles' => $this->assignableRoles($request->user()),
         ]);
     }
@@ -57,10 +52,12 @@ class UserController extends Controller implements HasMiddleware
 
         $user->syncRoles($request->validated('roles', []));
 
-        return to_route('users.index')->with('success', "User {$user->name} created.");
+        ActivityLogger::audit('created', 'user', $user->id, $user->name, [], $user->auditSnapshot());
+
+        return back()->with('success', "User {$user->name} created.");
     }
 
-    public function show(User $user): Response
+    public function show(Request $request, User $user): Response
     {
         $user->load('roles:id,name');
 
@@ -70,17 +67,6 @@ class UserController extends Controller implements HasMiddleware
                 'updated_at' => Setting::localTime($user->updated_at),
                 'permissions' => $user->getAllPermissions()->pluck('name')->sort()->values(),
             ],
-        ]);
-    }
-
-    public function edit(Request $request, User $user): Response
-    {
-        Gate::authorize('manage', $user);
-
-        $user->load('roles:id,name');
-
-        return Inertia::render('Users/Edit', [
-            'user' => $this->present($user),
             'roles' => $this->assignableRoles($request->user()),
         ]);
     }
@@ -100,6 +86,8 @@ class UserController extends Controller implements HasMiddleware
             throw ValidationException::withMessages(['roles' => 'This is the last active Super Admin; keep the role and active status.']);
         }
 
+        $before = $user->auditSnapshot();
+
         $user->fill([...$request->safe()->only('name', 'email'), 'is_active' => $isActive]);
 
         if ($request->filled('password')) {
@@ -109,7 +97,12 @@ class UserController extends Controller implements HasMiddleware
         $user->save();
         $user->syncRoles($roles);
 
-        return to_route('users.index')->with('success', "User {$user->name} updated.");
+        ActivityLogger::audit('updated', 'user', $user->id, $user->name, $before, [
+            ...$user->auditSnapshot(),
+            ...($request->filled('password') ? ['password' => 'new'] : []),
+        ]);
+
+        return back()->with('success', "User {$user->name} updated.");
     }
 
     public function destroy(Request $request, User $user): RedirectResponse
@@ -124,7 +117,10 @@ class UserController extends Controller implements HasMiddleware
             return back()->with('error', 'The last active Super Admin cannot be deleted.');
         }
 
+        $snapshot = $user->auditSnapshot();
         $user->delete();
+
+        ActivityLogger::audit('deleted', 'user', $user->id, $user->name, $snapshot);
 
         return to_route('users.index')->with('success', "User {$user->name} deleted.");
     }
@@ -141,6 +137,8 @@ class UserController extends Controller implements HasMiddleware
             'is_active' => $user->is_active,
             'roles' => $user->roles->pluck('name'),
             'created_at' => Setting::localTime($user->created_at),
+            // Whether the current user may edit/delete this account (UserPolicy); the UI hides the buttons otherwise.
+            'can_manage' => Gate::allows('manage', $user),
         ];
     }
 

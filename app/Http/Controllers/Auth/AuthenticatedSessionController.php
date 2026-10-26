@@ -33,6 +33,9 @@ class AuthenticatedSessionController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect('/login');
+        // Drop cached pages from the browser history so Back cannot show them after sign-out.
+        Inertia::clearHistory();
+
+        return redirect('/login')->with('success', 'You have been signed out.');
     }
 }
