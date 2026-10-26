@@ -1,0 +1,17 @@
+<script>
+    import { page } from '@inertiajs/svelte';
+
+    const flash = $derived(page.props.flash ?? {});
+</script>
+
+{#if flash.success}
+    <div class="mb-4 rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800" role="status">
+        {flash.success}
+    </div>
+{/if}
+
+{#if flash.error}
+    <div class="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
+        {flash.error}
+    </div>
+{/if}
